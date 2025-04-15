@@ -37,14 +37,14 @@ const appendRequestToSheet = async (data, typeRequest) => {
 
         let sheetName;
         switch (typeRequest) {
-        case 'CompleteRequest':
-            sheetName = 'CompleteRequest';
+        case 'Complete Scrap Request':
+            sheetName = 'Complete Scrap Request';
             break;
-        case 'PendingRequest':
-            sheetName = 'PendingRequest';
+        case 'Pending Scrap Request':
+            sheetName = 'Pending Scrap Request';
             break;
         default:
-            sheetName = 'PendingRequest'; 
+            sheetName = 'Pending Scrap Request'; 
         }
 
         await addRowToSheet(authClient, spreadsheetId, sheetName, data);
@@ -107,7 +107,7 @@ const readQuotations = async () => {
     
         const response = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: 'TEST',
+        range: 'Duration Time Quotation',
         });
     
         const rows = response.data.values;
@@ -159,8 +159,8 @@ const appendRequestId = async (data) => {
         });
 
         const authClient = await auth.getClient();
-        const spreadsheetId = '1y5AHcfgLuf26s8K9Fhh5geIow84ITDkST1I_TZjGnWs';
-        const sheetName = 'TEST'
+        const spreadsheetId = config.TIME_ID;
+        const sheetName = 'Duration Time Quotation' //Cambiar a Duration Time Quotation
 
         await addRowToSheet(authClient, spreadsheetId, sheetName, data);
         return 'Data Succesfully added'
