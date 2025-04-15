@@ -1,7 +1,7 @@
 import whatsappService from './whatsappService.js';
 import sheetsUtils  from './googleSheetsService.js';
 import { openAiExtractData, openAiSearchRates, openAiAsistance } from './openAiService.js';
-import { SelectedData, filterData } from './dataManagement.js';
+import { SelectedData, filterData, standardizePort } from './dataManagement.js';
 import { handleCompleteRequest, handlePendingRequest } from './requestHandler.js'
 
 class MessageHandler {
@@ -9,17 +9,20 @@ class MessageHandler {
   constructor() {
     this.requestState = {};
     this.assistanceState = {};
+    this.hasWelcomed = {}
   }
 
   async handleIncomingMessage(message, senderInfo) {
     if (message?.type === 'text') {
         const incomingMessage = message.text.body.toLowerCase().trim();
 
-        if(this.isGreeting(incomingMessage)){
-            await this.sendWelcomeMessage(message.from, message.id, senderInfo)
-            await this.sendWelcomeMenu(message.from);
+        if (!this.hasWelcomed[message.from]) {
+          await this.sendWelcomeMessage(message.from, message.id, senderInfo);
+          await this.sendWelcomeMenu(message.from);
+          this.hasWelcomed[message.from] = true; // 🔹 marca como saludado
+        }
 
-        } else if (incomingMessage === 'media') {
+        if (incomingMessage === 'media') {
           await this.sendMedia(message.from);
 
         } else if (this.requestState[message.from]) {
@@ -28,21 +31,15 @@ class MessageHandler {
         } else if (this.assistanceState[message.from]) {
           await this.handleAssistanceFlow(message.from, incomingMessage)
 
-        } else {
-            const response = `Echo: ${message.text.body}`;
-            await whatsappService.sendMessage(message.from, response, message.id, senderInfo);
-        }
+        } 
         await whatsappService.markAsRead(message.id);
+
     } else if (message?.type == 'interactive'){
       const option = message?.interactive?.button_reply?.id.toLowerCase().trim();
       console.log(option)
       await this.handleMenuOption(message.from, option);
       await whatsappService.markAsRead(message.id);
     }
-  }
-  isGreeting(message){
-    const greetings = ["hola", "hello", "hi", "buenas tardes"]
-    return greetings.includes(message);
   }
 
   getSenderName(senderInfo){
@@ -70,7 +67,6 @@ class MessageHandler {
   }
 
   async handleMenuOption(to, option) {
-    console.log("Option received:", option);
     let response = null;
     const normalizedOption = option.toLowerCase().trim();
   
@@ -85,11 +81,11 @@ class MessageHandler {
         break;
       case 'finished':
         response = "Thank you for using our service. Have a great day!";
-        // Optionally clear the assistance state if needed:
         delete this.assistanceState[to];
+        delete this.requestState[to];
+        delete this.hasWelcomed[to]; 
         break;
       case 'continue_question':
-        // Do nothing and wait for the user to ask a new question.
         return;
       default:
         response = "Please choose a valid option.";
@@ -101,46 +97,59 @@ class MessageHandler {
   }
 
   async handleRequestFlow(to, message) {
-    const state = this.requestState[to];
-    let response;
+    const state = this.requestState[to] || { step: 'information' };
 
-    if (state.step === 'information') {
-      response = await openAiExtractData(message);
-      this.requestState[to] = response;
+    const response = await openAiExtractData(message);
+
+    const previousData = this.requestState[to] || {};
+    const combinedData = {
+      ...previousData,
+      ...response,
+      step: 'information'
+    };
+    this.requestState[to] = combinedData;
+
+    const missingFields = [];
+    if (!response?.pol) missingFields.push("origin port");
+    if (!response?.pod) missingFields.push("destination port");
+    if (!response?.type_container) missingFields.push("container type");
+    if (!response?.commodity) missingFields.push("commodity");
+
+    if (missingFields.length > 0) {
+      await whatsappService.sendMessage(
+        to,
+        `It seems some information is missing: ${missingFields.join(", ")}. Please send your request again.`
+      );
+      this.requestState[to] = { step: 'information' };
+      return;
     }
 
-    await whatsappService.sendMessage(to, "Thank you for your request! We will be back soon with the best offer.");
-
-    const extractedData = this.requestState[to];
+    await whatsappService.sendMessage(
+      to,
+      "Thank you for your request! We will be back soon with the best offer."
+    );
+  
     const df = await sheetsUtils.readGoogleSheet();
+    const df_st = df.map(row => ({
+      ...row,
+      POD: standardizePort(row.POD)
+    }));
 
-    const allSelectedData = SelectedData(df);
-    const filteredData = filterData(allSelectedData, extractedData);
+    const allSelectedData = SelectedData(df_st);
+    const filteredData = filterData(allSelectedData, combinedData);
 
-    const allowedPols = ['baq', 'ctg', 'bun'];
-    const userPol = extractedData.pol ? extractedData.pol.toLowerCase() : '';
-    
-    const handler = new MessageHandler();
-
-    if (allowedPols.includes(userPol)) {
-      if (filteredData.length > 0) {
-        // Si se encontraron datos filtrados, se maneja la solicitud completa.
-        const offerSummary = await handleCompleteRequest(extractedData, filteredData, to);
-        this.requestState[to] = { ...this.requestState[to], step: 'requestProcessed' };
-        await whatsappService.sendMessage(to, offerSummary);
-        await this.sendAnotherRequest(to);
-      } else {
-        // Si no se encontraron datos filtrados, se registra una solicitud pendiente.
-        this.requestState[to] = { ...this.requestState[to], step: 'requestProcessed' };
-        await handlePendingRequest(extractedData, to);
-        await this.sendAnotherRequest(to);
-
-      }
-    } else {
-      // Si el POL no está permitido, se registra una solicitud pendiente.
+    if (filteredData.length > 0) {
+      // Si se encontraron datos filtrados, se maneja la solicitud completa.
+      const offerSummary = await handleCompleteRequest(combinedData, filteredData, to);
       this.requestState[to] = { ...this.requestState[to], step: 'requestProcessed' };
-      await handlePendingRequest(extractedData, to);
+      await whatsappService.sendMessage(to, offerSummary);
       await this.sendAnotherRequest(to);
+    } else {
+      // Si no se encontraron datos filtrados, se registra una solicitud pendiente.
+      this.requestState[to] = { ...this.requestState[to], step: 'requestProcessed' };
+      await handlePendingRequest(combinedData, to);
+      await this.sendAnotherRequest(to);
+
     }
   }
 

@@ -1,13 +1,14 @@
 import path from 'path';
 import { google } from 'googleapis';
+import config from "../config/env.js";
 
 const sheets = google.sheets('v4');
 
 async function addRowToSheet(auth, spreadsheetId, sheetName, values) {
     const request = {
         spreadsheetId,
-        range: sheetName,
-        valueInputOption: 'RAW',
+        range: `'${sheetName}'!A1`,
+        valueInputOption: 'USER_ENTERED',
         insertDataOption: 'INSERT_ROWS',
         resource: {
             values: [values],
@@ -32,7 +33,7 @@ const appendRequestToSheet = async (data, typeRequest) => {
         });
 
         const authClient = await auth.getClient();
-        const spreadsheetId = '1uPmi_hyHGhThjO0XjlDkD1orQpuio-PgrZQ4AEKMsT4';
+        const spreadsheetId = config.SHEET_ID;
 
         let sheetName;
         switch (typeRequest) {
@@ -63,7 +64,7 @@ const readGoogleSheet = async () => {
         });
 
         const authClient = await auth.getClient();
-        const spreadsheetId = '1OAGkqTAUKK2KHDjowpPKa0gaDYXq7kGUiGRCvby7dVY';
+        const spreadsheetId = config.SCRAP_ID;
         const sheets = google.sheets({ version: 'v4', auth: authClient });
 
         const response = await sheets.spreadsheets.values.get({
@@ -101,7 +102,7 @@ const readQuotations = async () => {
         });
     
         const authClient = await auth.getClient();
-        const spreadsheetId = '1y5AHcfgLuf26s8K9Fhh5geIow84ITDkST1I_TZjGnWs';
+        const spreadsheetId = config.TIME_ID;
         const sheets = google.sheets({ version: 'v4', auth: authClient });
     
         const response = await sheets.spreadsheets.values.get({

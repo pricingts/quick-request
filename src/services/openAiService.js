@@ -8,72 +8,57 @@ const client = new OpenAI({
 const promptTemplates = {
     extractData: (message) => `
     Extracts the following fields from this message: 
-    POL - POD
-    container type
-    empty pick up city
-    commodity
+    POL (Port of Origin)
+    POD (Port of Destination)
+    Container Type
+    Empty Pick-Up City (optional)
+    Commodity
 
-    Important: 
-    1. For the field POL or POD, if the value corresponds to any of the following (or variations thereof), standardize it to the corresponding value:
-    - If it is Cartagena (or similar), return "CTG"
-    - If it is Barranquilla (or similar), return "BAQ"
-    - If it is Buenaventura (or similar), return "BUN"
-    - YOKOHAMA → "YOKOHAMA"
-    - VERACRUZ → "VERACRUZ"
-    - SUAPE → "SUAPE"
-    - SENDAI (MIYAGI) or SENDAI → "SENDAI"
-    - SAVANNAH, GA → "SAVANNAH, GA"
-    - SANTOS → "SANTOS"
-    - SANSHUI → "SANSHUI"
-    - SANSHAN → "SANSHAN"
-    - ROTTERDAM → "ROTTERDAM"
-    - PORT QASIM → "PORT QASIM"
-    - PORT KLANG → "PORT KLANG"
-    - PORT EVERGLADES → "PORT EVERGLADES"
-    - PIRAEUS → "PIRAEUS"
-    - OITA → "OITA"
-    - NINGBO → "NINGBO
-    - NHAVA SHEVA → "NHAVA SHEVA"
-    - NEW ORLEANS → "NEW ORLEANS"
-    - NANHAI (even if repeated variations) → "NANHAI"
-    - NAGOYA → "NAGOYA"
-    - MUNDRA → "MUNDRA"
-    - MOJI → "MOJI"
-    - LIANHUASHAN → "LIANHUASHAN"
-    - LAEM CHABANG → "LAEM CHABANG"
-    - KARACHI → "KARACHI"
-    - KAOHSIUNG → "KAOHSIUNG"
-    - ITAPOA → "ITAPOA"
-    - INCHEON → "INCHEON"
-    - HOUSTON → "HOUSTON"
-    - HAIPHONG → "HAIPHONG"
-    - GAOMING → "GAOMING"
-    - DAMAIYU → "DAMAIYU"
-    - CHENNAI (KATTUPALLI) or CHENNAI → "CHENNAI"
-    - CHARLESTON → "CHARLESTON"
-    - BUSAN → "BUSAN"
-    - BILBAO → "BILBAO"
-    - ANTWERP → "ANTWERP"
-    - ALGECIRAS → "ALGECIRAS"
+    Important Instructions:
 
-    3. For the container type, standardize the values as follows:
+    1. **Standardize POL and POD values**:
+    If the extracted value corresponds to any of the following (or variations), return the standard value:
+
+    - "Cartagena" → "CTG"
+    - "Barranquilla" → "BAQ"
+    - "Buenaventura" → "BUN"
+    - "Sendai" → "SENDAI"
+    - "Chennai Kattupalli" → "CHENNA (KATTUPALLI)"
+    - "Nanhai" (or variations) → "NANHAI"
+
+
+    Special logic for NINGBO:
+    - If the user specifies **"Ningbo Beilun"** or similar → return "NINGBO (BEILUN)"
+    - If the user specifies **"Ningbo Meishan"** or similar → return "NINGBO (MEISHAN)"
+    - If the user only says **"Ningbo"** without a terminal → return "NINGBO"
+
+    Other ports (return exactly as shown if detected):
+    - "YOKOHAMA", "VERACRUZ", "SUAPE", "SAVANNAH", "SANTOS", "SANSHUI", "SANSHAN",
+    "ROTTERDAM", "PORT QASIM", "PORT KLANG", "PORT EVERGLADES", "PIRAEUS", "PARANAGUA", "OITA",
+    "NINGBO", "NHAVA SHEVA", "NEW ORLEANS", "NAGOYA", "MUNDRA", "MOJI", "LIANHUASHAN",
+    "LAEM CHABANG", "KARACHI", "KAOHSIUNG", "ITAPOA", "INCHEON", "HOUSTON", "HAIPHONG",
+    "GAOMING", "DAMAIYU", "CHARLESTON", "BUSAN", "BILBAO", "ANTWERP", "ALGECIRAS", "SUBIC BAY", 
+    "CHENNAI", "KOBE", "HOUSTON"", "NANHAI", "SENDAI", "CALLAO"
+
+    2. **Container Type**:
     - If the container is a 20-foot container, return "20' DRY"
     - If the container is a 40-foot container and it is of HC type, return "40' DRY HC"
     - Otherwise, if it is a 40-foot container, return "40' DRY"
 
-    4. For the empty pick up city, standardize the values as follows:
+    3. **Empty Pick-Up City**:
+    For the empty pick up city, standardize the values as follows:
     - If empty pick up city is cartagena or similar, return CTG
     - If empty pick up city is barranquilla or similar, return BAQ
     - If empty pick up city is medellin or similar, return MED
     - If empty pick up city is cali or similar, return CALI
     - If empty pick up city is not specified, return TODOS
 
-    5. For the commodity, standardize the values as follows:
+    4. For the commodity, standardize the values as follows:
     - If commodity is scrap or similar, return SCRAP METAL
     - If commodity is gelatina or similar, return GELATINA
     - If commodity is bebidas or similar, return BEBIDAS
 
-    6. For the empty pick up city field, it may not always be, if the user did not include it in the message, leave the fild in blank
+    5. If any of the fields are not present in the message, leave them as an empty string (except empty_pickup, which defaults to "TODOS").
 
     Returns a diccionary with the following structure:
 
@@ -85,34 +70,41 @@ const promptTemplates = {
     "type_container": "..."
     }
 
-    Where pol refers to Port of Origin, pod refers to Port of Destination. 
     Only return the diccionary with no more additional information.
+    Now extract the data from this message:
     Message: ${message}
 
     `,
 
-    searchRates: (data, df) => `Using the following information: ${JSON.stringify(data)}, your task is to search in this dataframe: ${JSON.stringify(df)} for the best offer that exactly matches the requested Port of Origin (pol), Port of Destination (pod), container type (type_container) and empty pick up city (empty_pickup).
-    Important instructions:
-    - The requested values in the provided information should be used as the reference.
-    - If any field in a matching record does not exactly correspond to the requested POL, POD, or container type after interpretation, ignore that record.
-    - For the "empty pick up" field:
-        - If the user does not specify an empty pick up, then consider all records regardless of the empty pick up city.
-        - If the user specifies an empty pick up, then only consider records where the empty pick up exactly matches the requested value, or where the empty pick up is indicated as "TODOS" (since the rate applies for any city).
-    - Among the records that clearly match the requested POL, POD, container type, and empty pick up (as per the above conditions), select the entry with the lowest cost in the column "TOTAL FLETE Y ORIGEN".
-    - If any data (e.g., port name or container type) appears ambiguous or non-matching, do not invent values; leave such fields blank in the final output.
+    searchRates: (data, df) => ` Using the following input data: ${JSON.stringify(data)}, search through this dataset: ${JSON.stringify(df)} to find the best matching freight offer.
 
-    When you find the best offer, return a dictionary with the following information:
+    **Matching Criteria**:
+    1. You must **strictly match** the following fields:
+    - Port of Origin (pol)
+    - Port of Destination (pod)
+    - Container Type (type_container)
 
-    - "POL": Port of Origin
-    - "POD": Port of Destination
-    - "TOTAL FLETE Y ORIGEN": the lowest cost found
-    - "FDO": Free days in Origin (if available, otherwise leave blank)
-    - "FDD": Free days in Destination (if available, otherwise leave blank)
-    - "Línea": (if available, otherwise leave blank)
-    - "FECHA FIN FLETE": (if available, otherwise leave blank)
-    - "TIPO CONT": container type
-    - "EMPTY PICK UP": empty pick up city
-    
+    2. **Empty Pick-Up City Logic**:
+    - If the user **did not provide** an empty_pickup, ignore this field and consider all records.
+    - If the user **did provide** an empty_pickup, only accept:
+        - Exact matches in the dataset
+        - Or records where the empty_pickup field is "TODOS"
+
+    **Interpretation Rules**:
+    - If any field (pol, pod, or type_container) in a row **does not exactly match** the interpreted user request, discard that row.
+    - Do **not infer or guess** missing values. If there is any ambiguity, leave the result field empty.
+    - For ports with known terminal variations (e.g. "NINGBO", "NINGBO (BEILUN)", "NINGBO (MEISHAN)"):
+    - If the request is "NINGBO" → match all variants.
+    - If the request is "NINGBO (BEILUN)" or similar → match only that variant.
+
+    **Selection Rule**:
+    - From the valid matches, return the entry with the **lowest value** in the column "TOTAL FLETE Y ORIGEN".
+
+    **Important Note**:
+    - When returning the result, the values in the output must match the ones from the dataset **exactly**.
+    - For example, if the dataset value for "empty_pickup" is "TODOS", you must return "empty_pickup": "TODOS" even if the user requested "CTG".
+
+    **Output Format**:
     Return the dictionary in the following structure, and only return the dictionary with no additional information. If any field is missing or unknown, leave its value as an empty string:
 
     {
@@ -123,7 +115,8 @@ const promptTemplates = {
         "FDD": "",
         "shipping_line": "",
         "validity": "",
-        "type_container": "...."
+        "type_container": "....",
+        "empty_pickup": "...."
     }
     `,
 
