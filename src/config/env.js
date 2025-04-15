@@ -11,5 +11,6 @@ export default {
   BASE_URL: process.env.BASE_URL,
   SHEET_ID: process.env.SHEET_ID,
   SCRAP_ID: process.env.SCRAP_ID,
-  TIME_ID: process.env.TIME_ID
+  TIME_ID: process.env.TIME_ID,
+  GOOGLE_CREDENTIALS: process.env.GOOGLE_CREDENTIALS
 };

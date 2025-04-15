@@ -1,10 +1,11 @@
 import path from 'path';
 import { google } from 'googleapis';
 import config from "../config/env.js";
-
-const sheets = google.sheets('v4');
+import { getAuthClient } from './googleAuth.js';
 
 async function addRowToSheet(auth, spreadsheetId, sheetName, values) {
+    const sheets = google.sheets('v4');
+
     const request = {
         spreadsheetId,
         range: `'${sheetName}'!A1`,
@@ -26,13 +27,9 @@ async function addRowToSheet(auth, spreadsheetId, sheetName, values) {
 
 const appendRequestToSheet = async (data, typeRequest) => {
     try {
-
-        const auth = new google.auth.GoogleAuth({
-            keyFile: path.join(process.cwd(), 'src/credentials', 'credentials.json'),
-            scopes: ['https://www.googleapis.com/auth/spreadsheets']
-        });
-
-        const authClient = await auth.getClient();
+        const authClient = await getAuthClient([
+            'https://www.googleapis.com/auth/spreadsheets'
+        ]);
         const spreadsheetId = config.SHEET_ID;
 
         let sheetName;
@@ -58,12 +55,10 @@ const appendRequestToSheet = async (data, typeRequest) => {
 
 const readGoogleSheet = async () => {
     try {
-        const auth = new google.auth.GoogleAuth({
-        keyFile: path.join(process.cwd(), 'src/credentials', 'credentials.json'),
-        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
-        });
+        const authClient = await getAuthClient([
+            'https://www.googleapis.com/auth/spreadsheets.readonly'
+        ]);
 
-        const authClient = await auth.getClient();
         const spreadsheetId = config.SCRAP_ID;
         const sheets = google.sheets({ version: 'v4', auth: authClient });
 
@@ -96,12 +91,10 @@ const readGoogleSheet = async () => {
 
 const readQuotations = async () => {
     try {
-        const auth = new google.auth.GoogleAuth({
-        keyFile: path.join(process.cwd(), 'src/credentials', 'credentials.json'),
-        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
-        });
-    
-        const authClient = await auth.getClient();
+        const authClient = await getAuthClient([
+            'https://www.googleapis.com/auth/spreadsheets.readonly'
+        ]);
+
         const spreadsheetId = config.TIME_ID;
         const sheets = google.sheets({ version: 'v4', auth: authClient });
     
@@ -152,15 +145,11 @@ async function generateRequestId() {
 
 const appendRequestId = async (data) => {
     try {
-
-        const auth = new google.auth.GoogleAuth({
-            keyFile: path.join(process.cwd(), 'src/credentials', 'credentials.json'),
-            scopes: ['https://www.googleapis.com/auth/spreadsheets']
-        });
-
-        const authClient = await auth.getClient();
+        const authClient = await getAuthClient([
+            'https://www.googleapis.com/auth/spreadsheets'
+        ]);
         const spreadsheetId = config.TIME_ID;
-        const sheetName = 'Duration Time Quotation' //Cambiar a Duration Time Quotation
+        const sheetName = 'TEST' //Cambiar a Duration Time Quotation
 
         await addRowToSheet(authClient, spreadsheetId, sheetName, data);
         return 'Data Succesfully added'
